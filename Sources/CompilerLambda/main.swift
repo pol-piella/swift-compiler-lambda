@@ -19,6 +19,7 @@ struct CompilerError: Codable {
 }
 
 let jsonEncoder = JSONEncoder()
+let jsonDecoder = JSONDecoder()
 
 func compile(code: String) throws -> String {
     let fileName = "swiftyChallenge-" + UUID().uuidString
@@ -32,11 +33,12 @@ func compile(code: String) throws -> String {
 // Needed for CORS
 let headers: HTTPHeaders = ["Access-Control-Allow-Origin": "*"]
 
-Lambda.run { (context, input: Input, callback: @escaping (Result<APIGateway.V2.Response, Error>) -> Void) in
+Lambda.run { (context, request: APIGateway.V2.Request, callback: @escaping (Result<APIGateway.V2.Response, Error>) -> Void) in
+    guard request.context.http.method == .POST && request.context.http.path == "/compile" else { callback(.success(.init(statusCode: .badRequest, body: "Path or method not allowed"))); return }
     do {
+        let input = try jsonDecoder.decode(Input.self, from: request.body!)
         let output = try compile(code: input.code)
-        let data = try jsonEncoder.encode(output)
-        callback(.success(.init(statusCode: .ok, headers: headers, body: String(data: data, encoding: .utf8))))
+        callback(.success(.init(statusCode: .ok, headers: headers, body: try jsonEncoder.encodeAsString(Output(output: output, errors: [])))))
     } catch Shell.ShellError.failed(let string) {
         let errors = string.matching(pattern: #".swift:(\d*):(\d*): error: ([^/]+)"#)
         let compilerErrors = errors.map { match in
@@ -47,11 +49,11 @@ Lambda.run { (context, input: Input, callback: @escaping (Result<APIGateway.V2.R
             )
         }
         let output = Output(output: "", errors: compilerErrors)
-        guard let data = try? jsonEncoder.encode(output) else { callback(.success(.init(statusCode: .badRequest))); return }
-        callback(.success(.init(statusCode: .ok, headers: headers, body: String(data: data, encoding: .utf8))))
+        guard let data = try? jsonEncoder.encodeAsString(output) else { callback(.success(.init(statusCode: .badRequest))); return }
+        callback(.success(.init(statusCode: .ok, headers: headers, body: data)))
     } catch let error {
         let output = Output(output: "", errors: [CompilerError(message: error.localizedDescription)])
-        guard let data = try? jsonEncoder.encode(output) else { callback(.success(.init(statusCode: .badRequest))); return }
-        callback(.success(.init(statusCode: .ok, headers: headers, body: String(data: data, encoding: .utf8))))
+        guard let data = try? jsonEncoder.encodeAsString(output) else { callback(.success(.init(statusCode: .badRequest))); return }
+        callback(.success(.init(statusCode: .ok, headers: headers, body: data)))
     }
 }
