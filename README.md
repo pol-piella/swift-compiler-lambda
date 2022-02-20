@@ -1,14 +1,15 @@
 # CompilerLambda
 
-## Build and Deploy
+This project builds and deploys a Lambda function that runs Swift code. This is similar to using the the Swift REPL locally, but opens up the possibility of running this in the cloud.
 
-```
-docker build . -t compiler-lambda --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g)
-docker run \
-    --rm \
-    --volume "$(pwd)/:/src" \
-    --workdir "/src/" \
-    compiler-lambda \
-    swift build --product CompilerLambda -c release -Xswiftc -static-stdlib
-./package.sh CompilerLambda
+Since the code needs access to a Swift toolchain, a custom docker image is built and deployed to AWS ECR. The Lambda then can be configured to using the latest version of the deployed image.
+
+## Build and deploy
+
+```bash
+docker build . -t compiler-lambda
+
+docker tag compiler-lambda:latest <Account_ID>.dkr.ecr.<Region>.amazonaws.com/compiler-lambda:latest
+
+docker push <Account_ID>.dkr.ecr.<Region>.amazonaws.com/compiler-lambda
 ```
